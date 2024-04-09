@@ -52,48 +52,59 @@ internal abstract class JoinClauseMixin(
   }
 
   private val queryExposed = ModifiableFileLazy {
-    var queryAvailable = tableOrSubqueryList[0].queryExposed()
+    val queryAvailable = mutableListOf<QueryResult>()
+
+    fun queryResult(query: Collection<QueryResult>, isOuterJoin: Boolean, constraint: SqlJoinConstraint): QueryResult {
+      var columns = query.flatMap { it.columns }
+      var synthesizedColumns = query.flatMap { it.synthesizedColumns }
+
+      if (isOuterJoin) {
+        columns = columns.map { it.copy(nullable = true) }
+        synthesizedColumns = synthesizedColumns.map { it.copy(nullable = true) }
+      }
+      if (constraint.node?.findChildByType(
+          SqlTypes.USING,
+        ) != null
+      ) {
+        val columnNames = constraint.columnNameList.map { it.name }
+        columns = columns.map {
+          it.copy(hiddenByUsing = it.element is PsiNamedElement && it.element.name in columnNames)
+        }
+      }
+      return QueryResult(
+        table = query.first().table,
+        columns = columns,
+        synthesizedColumns = synthesizedColumns,
+        joinConstraint = constraint,
+      )
+    }
+
     tableOrSubqueryList.drop(1)
       .zip(joinConstraintList)
       .zip(joinOperatorList) zip2@{ (subquery, constraint), operator ->
+        queryAvailable += tableOrSubqueryList.first().queryExposed().let { query ->
+          if (query.isNotEmpty()) queryResult(query, supportsRightJoin(operator), constraint) else return@zip2
+        }
         queryAvailable += subquery.queryExposed().let { query ->
-          when {
-            query.isEmpty() -> return@zip2
-            else -> {
-              var columns = query.flatMap { it.columns }
-              var synthesizedColumns = query.flatMap { it.synthesizedColumns }
-
-              if (supportsJoinOperator(operator)) {
-                columns = columns.map { it.copy(nullable = true) }
-                synthesizedColumns = synthesizedColumns.map { it.copy(nullable = true) }
-              }
-              if (constraint.node?.findChildByType(
-                  SqlTypes.USING,
-                ) != null
-              ) {
-                val columnNames = constraint.columnNameList.map { it.name }
-                columns = columns.map {
-                  it.copy(hiddenByUsing = it.element is PsiNamedElement && it.element.name in columnNames)
-                }
-              }
-              QueryResult(
-                table = query.first().table,
-                columns = columns,
-                synthesizedColumns = synthesizedColumns,
-                joinConstraint = constraint,
-              )
-            }
-          }
+          if (query.isNotEmpty()) queryResult(query, supportsLeftJoin(operator), constraint) else return@zip2
         }
       }
     return@ModifiableFileLazy queryAvailable
   }
 
-  private fun supportsJoinOperator(operator: SqlJoinOperator): Boolean {
+  private fun supportsRightJoin(operator: SqlJoinOperator): Boolean {
+    return operator.node.findChildByType(
+      TokenSet.create(
+        SqlTypes.RIGHT_JOIN_OPERATOR,
+        SqlTypes.FULL_JOIN_OPERATOR,
+      ),
+    ) != null
+  }
+
+  private fun supportsLeftJoin(operator: SqlJoinOperator): Boolean {
     return operator.node.findChildByType(
       TokenSet.create(
         SqlTypes.LEFT_JOIN_OPERATOR,
-        SqlTypes.RIGHT_JOIN_OPERATOR,
         SqlTypes.FULL_JOIN_OPERATOR,
       ),
     ) != null
