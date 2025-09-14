@@ -30,7 +30,7 @@ abstract class SqlFileBase(
 
   fun triggers(sqlStmtElement: PsiElement?): Collection<SqlCreateTriggerStmt> = schema(sqlStmtElement)
 
-  internal inline fun <reified T : SchemaContributor> schema(
+   inline fun <reified T : SchemaContributor> schema(
     sqlStmtElement: PsiElement? = null,
     includeAll: Boolean = true,
   ): Collection<T> {

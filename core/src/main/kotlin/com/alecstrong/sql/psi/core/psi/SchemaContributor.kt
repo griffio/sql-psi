@@ -27,14 +27,15 @@ internal open class SchemaContributorStubImpl<T : SchemaContributor>(
 }
 
 class Schema {
-  private val map = mutableMapOf<KClass<out SchemaContributor>, MutableMap<String, out SchemaContributor>>()
+  @PublishedApi
+  internal val map = mutableMapOf<KClass<out SchemaContributor>, MutableMap<String, out SchemaContributor>>()
 
   @Suppress("UNCHECKED_CAST")
-  internal inline fun <reified Value : SchemaContributor> forType(): MutableMap<String, Value> =
+   inline fun <reified Value : SchemaContributor> forType(): MutableMap<String, Value> =
     map.getOrPut(Value::class, { linkedMapOf<String, Value>() }) as MutableMap<String, Value>
 
   @Suppress("UNCHECKED_CAST")
-  internal inline fun <reified Value : SchemaContributor> put(value: SchemaContributor) {
+   inline fun <reified Value : SchemaContributor> put(value: SchemaContributor) {
     val map = map.getOrPut(Value::class, { linkedMapOf<String, Value>() }) as MutableMap<String, SchemaContributor>
     map.putIfAbsent(value.name(), value)
   }
